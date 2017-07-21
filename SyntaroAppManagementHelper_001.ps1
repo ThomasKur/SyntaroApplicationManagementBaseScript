@@ -1,4 +1,4 @@
-﻿<#
+<#
 .DESCRIPTION
 The Module contains a lot of Helpfull Functions to use in Syntaro
 
@@ -17,19 +17,21 @@ Date:   04.06.2017
 
 History
     001: First Version
+    002/2017-07-21/PBE: Changed the Logwriting so that it not always creates new Logfiles. Implemented a Log Rollover. Fixed a Problem with Expand-Zip 
 
 #>
 ## Manual Variable Definition
 ########################################################
 $DebugPreference = "SilentlyContinue"
-$ScriptVersion = "001"
+$ScriptVersion = "002"
 $ScriptName = "AppManagementHelper"
 
 ## Auto Variable Definition
 ########################################################
 
-$LogPath = "c:\Windows\Logs\"
-$LogBaseFileName = "$LogPath\$PackageName`_$PackageVersion`_$(Get-Date -Format yyyyMMdd-HHmmss)"
+$LogPath = "c:\Windows\Logs\_Syntaro"
+$LogBaseFileName = "$LogPath\$PackageName`_$PackageVersion"
+$MaximumLogSize =0.5 #Maximum Log Size in MB
 
 [string]$MSIProductCodeRegExPattern = '^(\{{0,1}([0-9a-fA-F]){8}-([0-9a-fA-F]){4}-([0-9a-fA-F]){4}-([0-9a-fA-F]){4}-([0-9a-fA-F]){12}\}{0,1})$'
 [string]$envProgramFiles = [Environment]::GetFolderPath('ProgramFiles')
@@ -139,6 +141,88 @@ Function Write-Log {
         Write-Verbose $output -Verbose
     }
     $output | Out-File -FilePath  "$LogBaseFileName`_PS.log" -Append
+}
+
+Function Check-LogFileSize {
+    <#
+    .DESCRIPTION
+    Check if the Logfile exceds a defined Size and if yes rolles id over to a .old.log.
+
+    .PARAMETER Log
+    Specifies the the Path to the Log.
+
+    .PARAMETER MaxSize
+    MaxSize in MB for the Maximum Log Size
+
+    .EXAMPLE
+    Check-LogFileSize -Log "C:\Temp\Super.log" -Size 1
+
+    #>
+    param(
+        [Parameter(Mandatory=$true,Position=1)]
+        [String]
+        $Log
+    ,
+        [Parameter(Mandatory=$true)]
+        [String]
+        $MaxSize
+    )    
+    
+    #Create the old.log File
+    $LogOld = $Log.Insert(($Log.LastIndexOf(".")),".old")
+        
+	if (Test-Path $Log) {
+		#Write-Log "The Log $Log exists"
+        $FileSizeInMB= ((Get-ItemProperty -Path $Log).Length)/1MB
+        #Write-Log "The Logs Size is $FileSizeInMB MB"
+        #Compare the File Size
+        If($FileSizeInMB -ge $MaxSize){
+            Write-Log "The definde Maximum Size is $MaxSize MB I need to rollover the Log"
+            #If the old.log File already exists remove it
+            if (Test-Path $LogOld) {
+                Write-Log "The Rollover File $LogOld already exists. I will remove it first"
+                Remove-Item -path $LogOld -Force
+            }
+            #Rename the Log
+            Rename-Item -Path $Log -NewName $LogOld -Force
+            Write-Log "Rolled the Log file over to $LogOld"
+
+        }
+        else{
+            #Write-Log "The definde Maximum Size is $MaxSize MB no need to rollover"
+        }
+
+	} else {
+		Write-Log "The Log $Log dosen't exists"
+	}
+}
+
+Function New-Folder{
+    <#
+    .DESCRIPTION
+    Creates a Folder if it's not existing.
+
+    .PARAMETER Path
+    Specifies the path of the new folder.
+
+    .EXAMPLE
+    CreateFolder "c:\temp"
+
+    .NOTES
+    This function creates a folder if doesn't exist.
+    #>
+    param(
+        [Parameter(Mandatory=$True,Position=1)]
+        [string]$Path
+    )
+	# Check if the folder Exists
+
+	if (Test-Path $Path) {
+		Write-Log "Folder: $Path Already Exists"
+	} else {
+		New-Item -Path $Path -type directory | Out-Null
+		Write-Log "Creating $Path"
+	}
 }
 
 Function Install-Font {
@@ -309,7 +393,7 @@ Function Expand-Zip {
     )
 
     try{
-        if(Test-Path $File){
+        if(!(Test-Path $File)){
             throw "Zip File '$File' does not exist."
         }
         [Reflection.Assembly]::LoadWithPartialName("System.IO.Compression.Filesystem")
@@ -667,6 +751,7 @@ Function Execute-Exe {
         Throw "Failed to Install '$($process.Name)' with Exit Code $InstallExitCode"
     }
 }
+
 Function Get-InstalledApplication {
 <#
 .SYNOPSIS
@@ -839,4 +924,14 @@ Function Get-InstalledApplication {
 }
 #endregion
 
+#region Initialization
+########################################################
+    #Check if the Log Folder exists otherwise create it
+    if (-! (Test-Path $LogPath)) {
+		New-Item -Path $LogPath -type directory | Out-Null
+	}
+   
+    #Check if the Log is to big
+    Check-LogFileSize -Log "$LogBaseFileName`_PS.log" -MaxSize $MaximumLogSize
 
+#endregion
