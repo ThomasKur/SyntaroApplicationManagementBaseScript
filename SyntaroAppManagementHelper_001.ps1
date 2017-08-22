@@ -696,10 +696,11 @@ Function Execute-MSI {
     #Search for Exit Code in Success Exit Code List
     $SuccessExitCodes = @(0,1605, 3010)
     if($SuccessExitCodes -contains $InstallExitCode){
-        Write-Verbose "Successfully $action`ed 'msiexec.exe $argsMSI' with Exit Code $InstallExitCode"
+        Write-Log "Successfully $action`ed 'msiexec.exe $argsMSI' with Exit Code $InstallExitCode"
         return $InstallExitCode
     } else {
         return $InstallExitCode
+	Write-Log "Failed to $action 'msiexec.exe $argsMSI' with Exit Code $InstallExitCode" -Type Error
         Throw "Failed to $action 'msiexec.exe $argsMSI' with Exit Code $InstallExitCode"
     }
 }
