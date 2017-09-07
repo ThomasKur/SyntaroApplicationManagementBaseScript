@@ -466,7 +466,7 @@ Function Get-PendingReboot {
 			Write-Log "Failed to get IsWindowsUpdateRebootPending." -Exception $_.Exception -Type Error
 		}
 		
-		## Determine if there is a pending reboot from a pending file rename operation
+ 		## Determine if there is a pending reboot from a pending file rename operation
 		[boolean]$IsFileRenameRebootPending = $false
 		$PendingFileRenameOperations = $null
 		If (Test-RegistryValue -Key 'HKLM:SYSTEM\CurrentControlSet\Control\Session Manager' -Value 'PendingFileRenameOperations') {
@@ -512,7 +512,7 @@ Function Kill-Process {
         [String]$Name
     )
     Write-Log "Kill Process $Name requested."
-    $process = Get-Process -Name $Name
+    $process = Get-Process -Name $Name -ErrorAction SilentlyContinue
     if($process) {
         Write-Log "Process $Name is running, therefore killing it."
         Stop-Process -Name "" -Force -ErrorAction SilentlyContinue
