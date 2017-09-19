@@ -1,4 +1,4 @@
-<#
+   <#
 .DESCRIPTION
 The Module contains a lot of Helpfull Functions to use in Syntaro
 
@@ -18,6 +18,7 @@ Date:   04.06.2017
 History
     001: First Version
     002/2017-07-21/PBE: Changed the Logwriting so that it not always creates new Logfiles. Implemented a Log Rollover. Fixed a Problem with Expand-Zip 
+    003/2017-09-19/KUR: Bugfixing Pathresolving for MSI's
 
 #>
 ## Manual Variable Definition
@@ -641,8 +642,7 @@ Function Execute-MSI {
 	## Set the working directory of the MSI
 	If ((-not $PathIsProductCode) -and (-not $workingDirectory)) { [string]$workingDirectory = Split-Path -Path $msiFile -Parent }
 
-    ## Enclose the MSI file in quotes to avoid issues with spaces when running msiexec
-	[string]$msiFile = "`"$msiFile`""
+
 		
 	## Enumerate all transforms specified, qualify the full path if possible and enclose in quotes
 	If ($transform) {
@@ -672,6 +672,8 @@ Function Execute-MSI {
 		[string]$mspFile = "`"$($patches -join ';')`""
 	}
 
+        ## Enclose the MSI file in quotes to avoid issues with spaces when running msiexec
+	[string]$msiFile = "`"$msiFile`""
     #endregion 
     	
 		
