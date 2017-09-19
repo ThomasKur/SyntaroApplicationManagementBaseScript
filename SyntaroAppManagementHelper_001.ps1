@@ -396,6 +396,8 @@ Function Expand-Zip {
     try{
         if(!(Test-Path $File)){
             throw "Zip File '$File' does not exist."
+        } else {
+            $File = (Get-Item $File).FullName
         }
         [Reflection.Assembly]::LoadWithPartialName("System.IO.Compression.Filesystem")
         [System.IO.Compression.zipfile]::ExtractToDirectory($File, $Destination)
@@ -737,7 +739,7 @@ Function Execute-Exe {
 		[string]$WorkingDirectory=$ScriptPath
 	)
 	
-    Write-Log "Start Executing $Path with Arguments '$Parameters'"
+    Write-Log "Start Executing $Path with Arguments '$Parameters'" -Type Debug
     $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -ArgumentList $Parameters -Wait -PassThru
 
     do {start-sleep -Milliseconds 500}
@@ -921,7 +923,7 @@ Function Get-InstalledApplication {
 			Continue
 		}
 	}
-		
+	Write-Log "Found $($installedApplication.Count) Apps."
 	return $installedApplication
 
 }
