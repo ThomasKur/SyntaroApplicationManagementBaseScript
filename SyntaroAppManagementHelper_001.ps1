@@ -1,4 +1,4 @@
-   <#
+<#
 .DESCRIPTION
 The Module contains a lot of Helpfull Functions to use in Syntaro
 
@@ -18,7 +18,7 @@ Date:   04.06.2017
 History
     001: First Version
     002/2017-07-21/PBE: Changed the Logwriting so that it not always creates new Logfiles. Implemented a Log Rollover. Fixed a Problem with Expand-Zip 
-    003/2017-09-19/KUR: Bugfixing Pathresolving for MSI's
+    003/2017-09-19/KUR: Bugfixing Pathresolving for MSI's and Kill Process
 
 #>
 ## Manual Variable Definition
@@ -516,7 +516,7 @@ Function Kill-Process {
     $process = Get-Process -Name $Name -ErrorAction SilentlyContinue
     if($process) {
         Write-Log "Process $Name is running, therefore killing it."
-        Stop-Process -Name "" -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name $Name -Force -ErrorAction SilentlyContinue
     } else {
         Write-Log "Process $Name is not running. continue."
     }
