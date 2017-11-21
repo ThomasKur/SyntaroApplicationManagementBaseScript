@@ -19,6 +19,7 @@ History
     001: First Version
     002/2017-07-21/PBE: Changed the Logwriting so that it not always creates new Logfiles. Implemented a Log Rollover. Fixed a Problem with Expand-Zip 
     003/2017-09-19/KUR: Bugfixing Pathresolving for MSI's and Kill Process
+    004/2017-11-21/KUR: Remove Font Functions, improved Logging, Error Handling changed in Expand-Zip
 
 #>
 ## Manual Variable Definition
@@ -221,88 +222,10 @@ Function New-Folder{
 	if (Test-Path $Path) {
 		Write-Log "Folder: $Path Already Exists"
 	} else {
-		New-Item -Path $Path -type directory | Out-Null
 		Write-Log "Creating $Path"
+        New-Item -Path $Path -type directory | Out-Null
+		Write-Log "Created $Path"
 	}
-}
-
-Function Install-Font {
-    <#
-    .DESCRIPTION
-    This FUnction will Install Fonts to the System
-
-    .PARAMETER Path
-    Path to the Fontfile
-
-    .EXAMPLE
-	    Install-Font (Get-Item c:\Temp\test.ttf)
-	
-	    Returns 
-	        $true = ok
-            $false = failed
-    #>
-    param(
-        [Parameter(Mandatory=$true,ValueFromPipeline=$true)][System.IO.FileSystemInfo[]]$Files
-    )
-    try {
-       $FONTS = 0x14
-       $objShell = New-Object -ComObject Shell.Application
-       $objFolder = $objShell.Namespace($FONTS)
-       ForEach ($File in $Files){
-            Write-Log "Try to Install $($File.FullName)"
-            $objFolder.CopyHere($File.FullName)
-       }
-       return $true
-    } catch {
-        Write-Log "Failed to register Fonts" -Type Error -Exception $_.Exception
-        return $false
-    }
-}
-
-Function Detect-Font {
-    <#
-    .DESCRIPTION
-    This FUnction will Check if these Fonts are installed
-
-    .PARAMETER Path
-    Path to the Fontfile
-
-    .EXAMPLE
-	    Detect-Font "Arial.ttf","hasd.ttf"
-	
-	    Returns 
-	        $true = Installed
-            $false = NotInstalled 
-    #>
-    param(
-        [Parameter(Mandatory=$true,ValueFromPipeline=$true)]
-        [String[]]$FontFileName
-    )
-    try {
-
-        $InstalledFonts = Get-ItemProperty -Path "hklm:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts\" 
-        $Names = $InstalledFonts | Get-Member -MemberType Properties
-        $InstalledFonstStr = @()
-        foreach($Name in $Names){
-            $filename = $InstalledFonts | Select-Object -ExpandProperty $Name.Name 
-            if($FontFileName -contains $filename){
-                $FontFileName = $FontFileName -ne $filename
-                Write-Log "Font $filename is already installed"
-            }
-        }
-        if($fonts){
-            # Not all fonts are installed
-            Write-Log "These Fonts are not installed: $($fonts -join ", ")"
-            $false
-        } else {
-            # All fonts are installed
-            $true 
-        }
-
-    } catch {
-        Write-Log "Failed to Detect Fonts" -Type Error -Exception $_.Exception
-        return $false
-    }
 }
 
 Function Set-RegValue {
@@ -345,12 +268,12 @@ Function Set-RegValue {
     
     try {
        $ErrorActionPreference = 'Stop' # convert all errors to terminating errors
-
+       Write-Log "Try setting Registry Value $Path, $Name, $Type, $Value"
 	   if (-not (Test-Path $Path -erroraction silentlycontinue)) {
-            New-Item -Path $Path -Force | Out-Null
+            New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
             Write-Log "Registry key $Path created"  
         } 
-        $rObject = New-ItemProperty -Path $Path -Name $Name -PropertyType $Type -Value $Value -Force
+        $rObject = New-ItemProperty -Path $Path -Name $Name -PropertyType $Type -Value $Value -Force -ErrorAction Stop
         Write-Log "Registry Value $Path, $Name, $Type, $Value set"
         [psobject]$RegValue = New-Object -TypeName 'PSObject' -Property @{
 		    Property = $rObject
@@ -382,9 +305,6 @@ Function Expand-Zip {
     .EXAMPLE
 	Expand-Zip
 	
-	Returns 
-		isSuccess >> $false/$true
-        ErrorMessage >> $null or Error Message
     #>
     param(
         [Parameter(Mandatory=$True)]
@@ -394,25 +314,28 @@ Function Expand-Zip {
     )
 
     try{
+        Write-Log "Start Extracting $File to $Destination"
         if(!(Test-Path $File)){
-            throw "Zip File '$File' does not exist."
+            if(!(Test-Path "$ScriptPath\$File")){
+                throw "Zip File '$File' does not exist."
+            } else {
+                $File = (Get-Item "$ScriptPath\$File").FullName
+            }
         } else {
             $File = (Get-Item $File).FullName
         }
+        Write-Log "Using FullName $File"
+        if(Test-Path -Path $Destination){
+            Write-Log "Destination already exists, starting cleanup directory"
+            Remove-Item -Path $Destination -Recurse -Force
+        }
         [Reflection.Assembly]::LoadWithPartialName("System.IO.Compression.Filesystem")
         [System.IO.Compression.zipfile]::ExtractToDirectory($File, $Destination)
-        [psobject]$UnzipResult = New-Object -TypeName 'PSObject' -Property @{
-		    isSuccess = $true
-            ErrorMessage = $null
-	    }
+        Write-Log "Successfully expanded ZIP File"
     } catch {
         Write-Log "Failed to extract ZIP File" -Type Error -Exception $_.Exception
-        [psobject]$UnzipResult = New-Object -TypeName 'PSObject' -Property @{
-		    isSuccess = $false
-            ErrorMessage = $_.Exception
-	    }
+        throw $_.Exception
     }
-    return $UnzipResult
 }
 
 Function Get-PendingReboot {
@@ -704,7 +627,7 @@ Function Execute-MSI {
         return $InstallExitCode
     } else {
         return $InstallExitCode
-	Write-Log "Failed to $action 'msiexec.exe $argsMSI' with Exit Code $InstallExitCode" -Type Error
+	    Write-Log "Failed to $action 'msiexec.exe $argsMSI' with Exit Code $InstallExitCode" -Type Error
         Throw "Failed to $action 'msiexec.exe $argsMSI' with Exit Code $InstallExitCode"
     }
 }
