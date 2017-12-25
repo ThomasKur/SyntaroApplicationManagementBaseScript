@@ -1034,7 +1034,7 @@ Function Set-Permission {
     Param (
         [Parameter( Mandatory=$True, 
                     Position=0,
-                    HelpMessage = "Path to the folder or file you want to modify (ex: C:\Temp)" )]
+		    HelpMessage = "Path to the folder or file you want to modify (ex: C:\Temp)" )]
         [ValidateScript({Test-Path $_})]
         [Alias('File', 'Folder')]
         [String] $Path,
@@ -1061,7 +1061,7 @@ Function Set-Permission {
     )
 
     Begin {
-        Write-Log "Set permissions $Permission on $pPath for $User with Recurse $Recurse"
+        Write-Log "Set permissions $Permission on $Path for $User with Recurse $Recurse"
         # Test run as Administrator
         $IsAdmin = [Bool] ((Whoami /All) -match "S-1-16-12288")
         If (!$IsAdmin){
