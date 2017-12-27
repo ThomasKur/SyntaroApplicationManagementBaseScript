@@ -1,4 +1,4 @@
-<#
+	<#
 .DESCRIPTION
 The Module contains a lot of Helpfull Functions to use in Syntaro
 
@@ -20,7 +20,7 @@ History
     002/2017-07-21/PBE: Changed the Logwriting so that it not always creates new Logfiles. Implemented a Log Rollover. Fixed a Problem with Expand-Zip 
     003/2017-09-19/KUR: Bugfixing Pathresolving for MSI's and Kill Process
     004/2017-11-21/KUR: Remove Font Functions, improved Logging, Error Handling changed in Expand-Zip
-
+    005/2017-12-26/KUR: Added functionality to set file and folder permissions, Easily create Active Setup scripts to set Registry keys.
 #>
 ## Manual Variable Definition
 ########################################################
