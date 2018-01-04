@@ -1063,10 +1063,13 @@ Function Set-Permission {
     Begin {
         Write-Log "Set permissions $Permission on $Path for $User with Recurse $Recurse"
         # Test run as Administrator
-        $IsAdmin = [Bool] ((Whoami /All) -match "S-1-16-12288")
+        $wid=[System.Security.Principal.WindowsIdentity]::GetCurrent()
+ 	$prp=new-object System.Security.Principal.WindowsPrincipal($wid)
+ 	$adm=[System.Security.Principal.WindowsBuiltInRole]::Administrator
+ 	$IsAdmin=$prp.IsInRole($adm)
         If (!$IsAdmin){
-            Write-Error -Message "Insufficient privileges. Try to run it as Administrator." -Category PermissionDenied
-            Break
+            Write-Log -Message "Insufficient privileges. Try to run it as Administrator." -Type Error
+	    throw "Insufficient privileges. Try to run it as Administrator."
         }
 
         # Set permissions
@@ -1146,7 +1149,7 @@ Function Set-Permission {
     }
 
     End {
-        $null = Set-Acl -Path $Path -AclObject $Acl
+        $null = Set-Acl -Path $Path -AclObject $Acl -ErrorAction Stop
     }
 }
 
