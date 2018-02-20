@@ -1,4 +1,4 @@
-	<#
+<#
 .DESCRIPTION
 The Module contains a lot of Helpfull Functions to use in Syntaro
 
@@ -21,6 +21,7 @@ History
     003/2017-09-19/KUR: Bugfixing Pathresolving for MSI's and Kill Process
     004/2017-11-21/KUR: Remove Font Functions, improved Logging, Error Handling changed in Expand-Zip
     005/2017-12-26/KUR: Added functionality to set file and folder permissions, Easily create Active Setup scripts to set Registry keys.
+    006/2018-02-20/KUR: Improving Error Handling in Execute-Exe and Execute-MSI
 #>
 ## Manual Variable Definition
 ########################################################
@@ -616,7 +617,12 @@ Function Execute-MSI {
 
     
     Write-Log "Installing 'msiexec.exe $argsMSI'"
-    $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $argsMSI -Wait -PassThru
+    try{
+        $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $argsMSI -Wait -PassThru
+    } catch {
+        Write-Log "Error executing msiexec.exe" -Type Error -Exception $_.Exception
+        throw $_.Exception
+    }
     do {start-sleep -Milliseconds 500}
     until ($process.HasExited)
     $InstallExitCode = $process.ExitCode
@@ -663,8 +669,12 @@ Function Execute-Exe {
 	)
 	
     Write-Log "Start Executing $Path with Arguments '$Parameters'" -Type Debug
-    $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -ArgumentList $Parameters -Wait -PassThru
-
+    try{
+        $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -ArgumentList $Parameters -Wait -PassThru
+    } catch {
+        Write-Log "Error executing msiexec.exe" -Type Error -Exception $_.Exception
+        throw $_.Exception
+    }
     do {start-sleep -Milliseconds 500}
     until ($process.HasExited)
     $InstallExitCode = $process.ExitCode
