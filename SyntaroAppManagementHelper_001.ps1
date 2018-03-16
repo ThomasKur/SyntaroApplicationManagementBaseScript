@@ -22,6 +22,9 @@ History
     004/2017-11-21/KUR: Remove Font Functions, improved Logging, Error Handling changed in Expand-Zip
     005/2017-12-26/KUR: Added functionality to set file and folder permissions, Easily create Active Setup scripts to set Registry keys.
     006/2018-02-20/KUR: Improving Error Handling in Execute-Exe and Execute-MSI
+    007/2018-03-16/KUR: During offline Testing the Packagename and version is not provisioned from Syntaro. If not set it is now dooing a fallback to Offline_SyntaroPkg with version 1.0.0.0
+                        Kill-Process supports now Wildcards and also to specify a path. When specifiing a path, all process, where the executable is in this path are killed. 
+                        Now we are able to support a FastRetry Action, so instead of killing a process, you can just stop the installation and mark it for a fast retry, then the installation will be retried more often. Stay tuned for a blog post about that.
 #>
 ## Manual Variable Definition
 ########################################################
@@ -31,6 +34,13 @@ $ScriptName = "AppManagementHelper"
 
 ## Auto Variable Definition
 ########################################################
+
+if($PackageName -eq $null){
+    $PackageName = "Offline_SyntaroPkg"
+}
+if($PackageVersion -eq $null){
+    $PackageVersion = "1.0.0.0"
+}
 
 $LogPath = "c:\Windows\Logs\_Syntaro"
 $LogBaseFileName = "$LogPath\$PackageName`_$PackageVersion"
@@ -428,21 +438,38 @@ Function Get-PendingReboot {
 Function Kill-Process {
 <#
     .SYNOPSIS
-	Will check if a process is Running and then kill it
+	Will check if a process is Running and then kill it, Wildcards are allowed.
+ 
+
     .DESCRIPTION
 	    
     .EXAMPLE
-	    Kill-Process "winword.exe"
+	    Kill-Process -Name "winword.exe"
+
+    .EXAMPLE
+	    Kill-Process -Name "winword*"
 
     #>
     param(
-        [String]$Name
+        [Parameter(Mandatory=$false,Position=1)]
+        [Parameter(ParameterSetName='Name')]
+        [String]$Name,
+        [Parameter(ParameterSetName='Path')]
+        [Parameter(Mandatory=$false)]
+        [String]$Path
     )
     Write-Log "Kill Process $Name requested."
-    $process = Get-Process -Name $Name -ErrorAction SilentlyContinue
-    if($process) {
-        Write-Log "Process $Name is running, therefore killing it."
-        Stop-Process -Name $Name -Force -ErrorAction SilentlyContinue
+    if(-not [String]::IsNullOrWhiteSpace($Name)){
+        $processes = Get-Process -Name $Name -ErrorAction SilentlyContinue
+    }
+    if(-not [String]::IsNullOrWhiteSpace($Path)){
+        $processes = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -match $path }
+    }
+    if($processes) {
+        foreach($process in $processes){
+            Write-Log "Process $($process.Name) is running, therefore killing it."
+            Stop-Process -Name $Name -Force -ErrorAction SilentlyContinue
+        }
     } else {
         Write-Log "Process $Name is not running. continue."
     }
@@ -1245,6 +1272,200 @@ function Set-RegistryValueForAllUsers {
         }
     } catch {
         Write-Log $_.Exception.Message
+    }
+}
+
+Function Add-FastRetry {
+    <#
+    .DESCRIPTION
+    Adds trigger to existing scheduled task
+
+    .PARAMETER TaskName
+    Specifies when the task should be triggered. Default is Syntaro Installer
+
+    .PARAMETER Delay
+    Delay specifies, how many minutes should be waited until the scheduled task should be run
+    Minimum of the delay is 30min
+
+    .PARAMETER AppName
+    The name of the installed application
+
+    .PARAMETER NumberOfRetry
+    Specifies, how many times, the task should be rerun until it is aborted. Default will be 20
+
+    .EXAMPLE
+    Add-Trigger -Delay 5
+
+    .NOTES
+    This function should be used to add trigers to an existing scheduled task
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [String]
+        $TaskName = "Syntaro Updater"
+    ,
+        [Parameter(Mandatory=$true)]
+        [ValidateScript({if($_ -ge 30){
+                            $true
+                            }else{
+                            Write-Log "Delay must be at least 30"
+                            $false
+                            }
+                        })]
+        [int]
+        $Delay
+    ,
+        [Parameter(Mandatory=$false)]
+        [String]
+        $AppName = $packageName
+    ,
+        [Parameter(Mandatory=$false)]
+        [int]
+        $NumberOfRetry = 20
+    )
+
+    
+
+    $regPath = Get-RegistrySyntaroAppPath -AppName $AppName
+
+    
+    $ValueData = Get-ItemProperty -Path $regPath -Name 'RetryCount' -ErrorAction SilentlyContinue
+    Write-Log "Current Retry number is '$($ValueData.RetryCount)'" -Type Info
+    IF($ValueData){
+        [int]$retry = $valueData.RetryCount
+        #check if defined maximum number of retry was reached
+        if($retry -ge  $NumberOfRetry){
+            #calling functoin to remove triggers if max number of retry was reached
+            Remove-FastRetry -AppName $AppName -TaskName $TaskName -regEntry $false
+            Write-Log "Maximum number of retry was reached" -Type Warn
+            #exit because max number of retry was reached
+            Throw "Specified max retry number was exceeded"
+        }else{
+            #counting up retry count in the registry
+            $retry++
+            Write-Log "Retry number $retry"
+            Set-RegValue -Path $regPath -Name 'RetryCount' -Type Dword -Value $retry
+        }
+    }else {
+        #create registry value for retry count
+        Write-Log "Creating new registy entry for retry count"
+        Set-RegValue -Path $regPath -Name 'RetryCount' -Type Dword -Value 1
+    }
+
+    #Creatinng new trigger for the scheduled task.
+    $newTrigger = @($(New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes($delay)),$(New-ScheduledTaskTrigger -Daily -At 12AM))
+
+    Try{
+        #setting defined triggers for scheduled task
+        Set-ScheduledTask -TaskName $TaskName -Trigger $newTrigger -ErrorAction Stop
+        Write-Log "Trigger was set to run in $delay minutes" -Type Info
+    }catch{
+        Write-Log "Could not add a new trigger for scheduled task" -Type Error -Exception $_.Exception
+        Throw $_.Exception
+    }
+    
+}
+
+Function Get-RegistrySyntaroAppPath {
+        <#
+    .DESCRIPTION
+    Returns the Registry Path of the Application
+
+    .PARAMETER AppName
+    The name of the application for which the registry path should be catched
+
+    .EXAMPLE
+    Get-RegistrySyntaroAppPath
+
+    .NOTES
+    
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [String]
+        $AppName = $packageName
+    )
+    try{
+        $regItems = Get-ChildItem -path $RegistrySyntaroBasePath -ErrorAction Stop | Get-ItemProperty -Name 'Name'
+    }catch{
+        Write-Log "Could not get registry items" -Type Error -Exception $_.Exception
+        Trhow $_.Exception
+    }
+    Write-Log "Checking if registry entry for defined application '$AppName' exists" -Type Info
+    foreach($item in $regItems){
+        #checking if registry key for defined application exists and setting registry path
+        if($item.name -match $AppName){
+            $regPath = $item.PSPath
+            Write-Log "Found '$regPath' for '$AppName'"
+        }
+    }
+    #check if regPath was set and exit if none is set
+    if(!($regPath)){
+        Write-Log "Defined application '$AppName' could not be found" -Type Error
+        Throw "Could not find registry key for specified application"
+    }
+    return $regPath
+}
+
+Function Remove-FastRetry {
+    <#
+    .DESCRIPTION
+    Removes all trigger which are set to run once to an existing scheduled task
+
+    .PARAMETER TaskName
+    Specifies which task should be triggered. Defulat is Syntaro Installer
+
+    .PARAMETER AppName
+    The name of the application, which should be installed.
+
+    .EXAMPLE
+    Remove-Trigger
+
+    .NOTES
+    This function should be used to remove trigers to an existing scheduled task
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [String]
+        $TaskName = "Syntaro Updater"
+    ,
+        [Parameter(Mandatory=$false)]
+        [String]
+        $AppName = $packageName
+    ,
+        [Parameter(Mandatory=$false)]
+        [boolean]
+        $regEntry = $true
+    )
+
+    if($regEntry){
+        $regPath = Get-RegistrySyntaroAppPath -AppName $AppName
+
+        $ValueData = Get-ItemProperty -Path $regPath -Name 'RetryCount' -ErrorAction SilentlyContinue
+        Write-Log "Current Retry number is '$($ValueData.RetryCount)'" -Type Info
+        IF($ValueData){
+            try{
+                #Deleting registy key for the retryCount
+                Remove-ItemProperty -Path $regPath -Name 'RetryCount' -Force
+                Write-Log "Registry value from $regPath was deleted"
+            }catch{
+                Write-Log "Could not delete RetryCount" -Type Error -Exception $_.Exception
+                Throw $_.Exception
+            }
+        }else {
+        Write-Log "Registry value for RetryCount does not exist in $regPath" -Type Warning
+        }
+    }
+    #Creating trigger to run once every day
+    $newTrigger = New-ScheduledTaskTrigger -Daily -At 12AM
+
+    Try{
+        #Setting defined Trigger for the scheduled task
+        Set-ScheduledTask -TaskName $TaskName -Trigger $newTrigger -ErrorAction Stop
+        Write-Log "Trigger was set to run daily at 12AM"
+    }catch{
+        Write-Log "Could not add a new trigger for scheduled task" -Type Error -Exception $_.Exception
+        Throw $_.Exception
     }
 }
 #endregion
