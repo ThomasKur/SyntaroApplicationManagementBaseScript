@@ -25,6 +25,7 @@ History
     007/2018-03-16/KUR: During offline Testing the Packagename and version is not provisioned from Syntaro. If not set it is now dooing a fallback to Offline_SyntaroPkg with version 1.0.0.0
                         Kill-Process supports now Wildcards and also to specify a path. When specifiing a path, all process, where the executable is in this path are killed. 
                         Now we are able to support a FastRetry Action, so instead of killing a process, you can just stop the installation and mark it for a fast retry, then the installation will be retried more often. Stay tuned for a blog post about that.
+                        Write-Log Allow the Type "Warning" too instead of only "Warn"
 #>
 ## Manual Variable Definition
 ########################################################
@@ -111,7 +112,7 @@ Function Write-Log {
         $Message
     ,
         [Parameter(Mandatory=$false)]
-        [ValidateSet("Info","Debug","Warn","Error")]
+        [ValidateSet("Info","Debug","Warn","Warning","Error")]
         [String]
         $Type = "Debug"
     ,
@@ -121,6 +122,9 @@ Function Write-Log {
     )
     
     $DateTimeString = Get-Date -Format "yyyy-MM-dd HH:mm:sszz"
+    if($Type -eq "Warning"){
+        $Type = "Warn"
+    }
 
     # Add CallStack
     try{
