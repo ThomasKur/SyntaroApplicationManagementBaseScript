@@ -26,6 +26,7 @@ History
                         Kill-Process supports now Wildcards and also to specify a path. When specifiing a path, all process, where the executable is in this path are killed. 
                         Now we are able to support a FastRetry Action, so instead of killing a process, you can just stop the installation and mark it for a fast retry, then the installation will be retried more often. Stay tuned for a blog post about that.
                         Write-Log Allow the Type "Warning" too instead of only "Warn"
+    008/2018-03-27/KUR: Bugfixing Kill-Process
 #>
 ## Manual Variable Definition
 ########################################################
@@ -467,12 +468,12 @@ Function Kill-Process {
         $processes = Get-Process -Name $Name -ErrorAction SilentlyContinue
     }
     if(-not [String]::IsNullOrWhiteSpace($Path)){
-        $processes = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -match $path }
+        $processes = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like $path }
     }
     if($processes) {
         foreach($process in $processes){
             Write-Log "Process $($process.Name) is running, therefore killing it."
-            Stop-Process -Name $Name -Force -ErrorAction SilentlyContinue
+            Stop-Process -Name $process.Name -Force -ErrorAction SilentlyContinue
         }
     } else {
         Write-Log "Process $Name is not running. continue."
