@@ -27,6 +27,7 @@ History
                         Now we are able to support a FastRetry Action, so instead of killing a process, you can just stop the installation and mark it for a fast retry, then the installation will be retried more often. Stay tuned for a blog post about that.
                         Write-Log Allow the Type "Warning" too instead of only "Warn"
     008/2018-03-27/KUR: Bugfixing Kill-Process
+                        Changing Wait Behaviour in Execute-Exe for Waiting on the Exit of the Thread.
 #>
 ## Manual Variable Definition
 ########################################################
@@ -702,13 +703,17 @@ Function Execute-Exe {
 	
     Write-Log "Start Executing $Path with Arguments '$Parameters'" -Type Debug
     try{
-        $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -ArgumentList $Parameters -Wait -PassThru
+        $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -ArgumentList $Parameters -PassThru
+        $process
+        $process.WaitForExit()
     } catch {
-        Write-Log "Error executing msiexec.exe" -Type Error -Exception $_.Exception
+        Write-Log "Error executing $Path" -Type Error -Exception $_.Exception
         throw $_.Exception
     }
-    do {start-sleep -Milliseconds 500}
-    until ($process.HasExited)
+    do {
+        start-sleep -Seconds 1
+        $process.Refresh()
+    } until ($process.HasExited)
     $InstallExitCode = $process.ExitCode
     Write-Log "Process has exited with exit code: $InstallExitCode"
     #Search for Exit Code in Success Exit Code List
