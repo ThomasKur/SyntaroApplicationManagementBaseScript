@@ -28,6 +28,7 @@ History
                         Write-Log Allow the Type "Warning" too instead of only "Warn"
     008/2018-03-27/KUR: Bugfixing Kill-Process
                         Changing Wait Behaviour in Execute-Exe for Waiting on the Exit of the Thread.
+    009/2018-04-01/KUR: New Functionality to check for Version in Get-InstalledApplication
 #>
 ## Manual Variable Definition
 ########################################################
@@ -651,13 +652,16 @@ Function Execute-MSI {
     
     Write-Log "Installing 'msiexec.exe $argsMSI'"
     try{
-        $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $argsMSI -Wait -PassThru
+        $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $argsMSI -PassThru
+        $process.WaitForExit()
     } catch {
         Write-Log "Error executing msiexec.exe" -Type Error -Exception $_.Exception
         throw $_.Exception
     }
-    do {start-sleep -Milliseconds 500}
-    until ($process.HasExited)
+    do {
+        start-sleep -Seconds 1
+        $process.Refresh()
+    } until ($process.HasExited)
     $InstallExitCode = $process.ExitCode
     #Search for Exit Code in Success Exit Code List
     $SuccessExitCodes = @(0,1605, 3010)
@@ -704,7 +708,6 @@ Function Execute-Exe {
     Write-Log "Start Executing $Path with Arguments '$Parameters'" -Type Debug
     try{
         $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -ArgumentList $Parameters -PassThru
-        $process
         $process.WaitForExit()
     } catch {
         Write-Log "Error executing $Path" -Type Error -Exception $_.Exception
@@ -746,6 +749,11 @@ Function Get-InstalledApplication {
 	The product code of the application to retrieve information for.
 .PARAMETER IncludeUpdatesAndHotfixes
 	Include matches against updates and hotfixes in results.
+.PARAMETER Version
+	Version which has to match. If the Version cannot be parsed to a Version object, it will be compared as string.
+.PARAMETER VersionComparison
+    Defines how the Version is compared. Possible Values are: 'ge','gt','eq','le','lt'
+    Default Value is ge
 .EXAMPLE
 	Get-InstalledApplication -Name 'Adobe Flash'
 .EXAMPLE
@@ -768,7 +776,12 @@ Function Get-InstalledApplication {
 		[ValidateNotNullorEmpty()]
 		[string]$ProductCode,
 		[Parameter(Mandatory=$false)]
-		[switch]$IncludeUpdatesAndHotfixes
+		[switch]$IncludeUpdatesAndHotfixes,
+		[Parameter(Mandatory=$false)]
+		[Version]$Version,
+		[Parameter(Mandatory=$false)]
+        [ValidateSet('ge','gt','eq','le','lt')]
+		[string]$VersionComparison
 	)
 	
 	If ($name) {
@@ -893,6 +906,29 @@ Function Get-InstalledApplication {
 			Continue
 		}
 	}
+    if($Version -ne $null){
+        if($VersionComparison -eq $null){
+            $VersionComparison = "ge"
+        }
+        Write-Log -Message "Filtering Versions $VersionComparison $Version"
+        $installedApplication = $installedApplication | Where-Object {
+            [Version]$AppVersion = $null
+            if([Version]::TryParse($_.DisplayVersion,[ref]$AppVersion)){
+            } else {
+                [string]$AppVersion = [String]($_.DisplayVersion)
+                $Version = [string]$Version
+            }
+                switch($VersionComparison){
+                    lt { $AppVersion -lt $Version}
+                    le { $AppVersion -le $Version }
+                    eq { $AppVersion -eq $Version }
+                    ge { $AppVersion -ge $Version }
+                    gt { $AppVersion -gt $Version }
+                    default{ $AppVersion -ge $Version }
+                }    
+            }
+            
+    }
 	Write-Log "Found $($installedApplication.Count) Apps."
 	return $installedApplication
 
