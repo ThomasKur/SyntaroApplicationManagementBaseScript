@@ -316,7 +316,7 @@ Write-Log "Start Script $Scriptname"
 
 try{
     $Dependencies = Get-ChildItem "$ScriptPath\Dependencies"
-    Add-ProvisionedAppxPackage -PackagePath "$ScriptPath\Microsoft.CompanyPortal_2018.319.702.0_neutral_~_8wekyb3d8bbwe.AppxBundle" -LicensePath "$ScriptPath\Microsoft.CompanyPortal_8wekyb3d8bbwe_58a1808e-9398-4976-1a05-fc884e16f609.xml" -DependencyPackagePath $Dependencies.FullName -Online -ErrorAction Stop
+    Add-ProvisionedAppxPackage -PackagePath "$ScriptPath\$AppxBundle" -LicensePath "$ScriptPath\$License" -DependencyPackagePath $Dependencies.FullName -Online -ErrorAction Stop
 } catch {
     Write-Log -Message "Installation Failed" -Type Error -Exception $_.Exception
 }
