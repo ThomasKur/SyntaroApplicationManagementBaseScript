@@ -29,11 +29,12 @@ History
     008/2018-03-27/KUR: Bugfixing Kill-Process
                         Changing Wait Behaviour in Execute-Exe for Waiting on the Exit of the Thread.
     009/2018-04-01/KUR: New Functionality to check for Version in Get-InstalledApplication
+    010/2018-04-23/KUR: Added new function Add-ActiveUserSetup which can be used in combination with ActiveUserSetup solution of baseVISION.
 #>
 ## Manual Variable Definition
 ########################################################
 $DebugPreference = "SilentlyContinue"
-$ScriptVersion = "002"
+$ScriptVersion = "010"
 $ScriptName = "AppManagementHelper"
 
 ## Auto Variable Definition
@@ -1473,12 +1474,10 @@ Function Remove-FastRetry {
     param(
         [Parameter(Mandatory=$false)]
         [String]
-        $TaskName = "Syntaro Updater"
-    ,
+        $TaskName = "Syntaro Updater",
         [Parameter(Mandatory=$false)]
         [String]
-        $AppName = $packageName
-    ,
+        $AppName = $packageName,
         [Parameter(Mandatory=$false)]
         [boolean]
         $regEntry = $true
@@ -1513,6 +1512,86 @@ Function Remove-FastRetry {
         Write-Log "Could not add a new trigger for scheduled task" -Type Error -Exception $_.Exception
         Throw $_.Exception
     }
+}
+
+Function Add-ActiveUserSetup {
+    <#
+    .DESCRIPTION
+    Adds new task to the active User setup tasks, which are executed in usercontect of every user. A Prerequisite to use this functionality is, that you have deployed the baseVISION Active User Setup Solution.
+
+    .PARAMETER Name
+    Specifies when the task should be triggered. Default is Syntaro Installer
+
+    .PARAMETER Path
+	The path to the Executable file.
+
+    .PARAMETER Parameters
+	The parameters to pass to the executable specified in the Path variable.
+
+    .PARAMETER SuccessExitCodes
+    List of exit codes to threat as successfull. Default is 0 and 3010.
+
+    .PARAMETER Version
+    Version Number of the Active User Setup. Everytime you change something, then you should increment by 1.
+
+    .PARAMETER WaitOnFinish
+    when this option is true, the the processes are executed serial and not in parallel. Default Falue is true.
+
+    .PARAMETER OnlyWhenSuccessful
+    when this option is true, then the entry is only marked as executed, when the exit code matches one of the SuccessExitCodes. Default Falue is true.
+
+    .EXAMPLE
+    Add-ActiveUserSetup -Name "Test" -Path "iexplore" -Parameters "www.basevision.ch" -SuccessExitCodes @(0,3010) -Version 1 -WaitOnFinish $false -OnlyWhenSuccessful $true
+
+    
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [String]
+        $Name = $PackageName,
+        [Parameter(Mandatory=$true,HelpMessage='Please enter either the path to the Executable file')]
+		[Alias('FilePath')]
+		[string]$Path,
+		[Parameter(Mandatory=$false)]
+		[Alias('Arguments')]
+		[string]$Parameters = "",
+		[Parameter(Mandatory=$false)]
+		[ValidateNotNullorEmpty()]
+		[int[]]$SuccessExitCodes = @(0, 3010),
+        [Parameter(Mandatory=$false)]
+		[ValidateNotNullorEmpty()]
+		[int]$Version = 1,
+        [Parameter(Mandatory=$false)]
+		[ValidateNotNullorEmpty()]
+		[boolean]$WaitOnFinish = $true,
+        [Parameter(Mandatory=$false)]
+		[ValidateNotNullorEmpty()]
+		[boolean]$OnlyWhenSuccessful = $true
+        
+    )
+    $Result = @()
+    $Result += Set-RegValue -Path "HKLM:\SOFTWARE\ActiveUserSetup\$Name" -Name "Execute" -Type String -Value $Path
+    $Result += Set-RegValue -Path "HKLM:\SOFTWARE\ActiveUserSetup\$Name" -Name "SuccessfulReturnCodes" -Type String -Value ($SuccessExitCodes -join ";")
+    if($WaitOnFinish){
+        $WaitOnFinishInt = 1
+    }else {
+        $WaitOnFinishInt = 0
+    }
+    $Result += Set-RegValue -Path "HKLM:\SOFTWARE\ActiveUserSetup\$Name" -Name "WaitOnFinish" -Type DWord -Value $WaitOnFinishInt
+    if($OnlyWhenSuccessful){
+        $OnlyWhenSuccessfulInt = 1
+    }else {
+        $OnlyWhenSuccessfulInt = 0
+    }
+    $Result += Set-RegValue -Path "HKLM:\SOFTWARE\ActiveUserSetup\$Name" -Name "OnlyWhenSuccessful" -Type DWord -Value $OnlyWhenSuccessfulInt
+    $Result += Set-RegValue -Path "HKLM:\SOFTWARE\ActiveUserSetup\$Name" -Name "Name" -Type String -Value $Name
+    $Result += Set-RegValue -Path "HKLM:\SOFTWARE\ActiveUserSetup\$Name" -Name "Version" -Type String -Value $Version
+    $Result += Set-RegValue -Path "HKLM:\SOFTWARE\ActiveUserSetup\$Name" -Name "Argument" -Type String -Value $Parameters
+    
+    if(($Result | Where-Object { $_.isSuccess -eq $false })){
+        Write-Log "Regsitry Keys for Active User Setup not set." -Type Error
+        throw "Regsitry Keys for Active User Setup not set."
+    } 
 }
 #endregion
 
