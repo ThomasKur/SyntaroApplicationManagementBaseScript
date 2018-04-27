@@ -36,7 +36,7 @@ History
 $DebugPreference = "SilentlyContinue"
 $ScriptVersion = "010"
 $ScriptName = "AppManagementHelper"
-
+$RegistrySyntaroBasePath = "HKLM:\Software\Syntaro\ApplicationManagement"
 ## Auto Variable Definition
 ########################################################
 
