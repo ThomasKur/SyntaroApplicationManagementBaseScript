@@ -30,6 +30,7 @@ History
                         Changing Wait Behaviour in Execute-Exe for Waiting on the Exit of the Thread.
     009/2018-04-01/KUR: New Functionality to check for Version in Get-InstalledApplication
     010/2018-04-23/KUR: Added new function Add-ActiveUserSetup which can be used in combination with ActiveUserSetup solution of baseVISION.
+    011/2018-08-14/KUR: Execute-EXE can now be executed without arguments.
 #>
 ## Manual Variable Definition
 ########################################################
@@ -693,7 +694,6 @@ Function Execute-Exe {
 		[string]$Path,
 		[Parameter(Mandatory=$false)]
 		[Alias('Arguments')]
-		[ValidateNotNullorEmpty()]
 		[string]$Parameters,
 		[Parameter(Mandatory=$false)]
 		[ValidateNotNullorEmpty()]
@@ -708,7 +708,11 @@ Function Execute-Exe {
 	
     Write-Log "Start Executing $Path with Arguments '$Parameters'" -Type Debug
     try{
-        $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -ArgumentList $Parameters -PassThru
+    	if([String]::IsNullOrWhiteSpace($Parameters)){
+            $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -PassThru
+	} else {
+	    $process = Start-Process -FilePath $Path -WorkingDirectory $WorkingDirectory -ArgumentList $Parameters -PassThru
+	}
         $process.WaitForExit()
     } catch {
         Write-Log "Error executing $Path" -Type Error -Exception $_.Exception
