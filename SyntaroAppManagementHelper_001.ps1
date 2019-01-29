@@ -31,11 +31,12 @@ History
     009/2018-04-01/KUR: New Functionality to check for Version in Get-InstalledApplication
     010/2018-04-23/KUR: Added new function Add-ActiveUserSetup which can be used in combination with ActiveUserSetup solution of baseVISION.
     011/2018-08-14/KUR: Execute-EXE can now be executed without arguments.
+    012/2019-01-29/ATHI: Added new functions: Invoke-GenericUserMessage, Invoke-ProcessMessage and Invokr-PosPoneMessage which can be used with the UserNotification plugin
 #>
 ## Manual Variable Definition
 ########################################################
 $DebugPreference = "SilentlyContinue"
-$ScriptVersion = "010"
+$ScriptVersion = "012"
 $ScriptName = "AppManagementHelper"
 $RegistrySyntaroBasePath = "HKLM:\Software\Syntaro\ApplicationManagement"
 ## Auto Variable Definition
@@ -85,6 +86,21 @@ try{
     $ScriptPath = $FallbackScriptPath
 }
  
+#JSON-Object for UserNotification.
+class SyntaroNotification
+{
+    [GUID]$id;
+    [string]$notificationType;
+    [string]$title;
+    [string]$message;
+    [boolean]$waitOnClose;
+    [boolean]$AutoKillApplication;
+    [int]$TimeForRebootSeconds;
+    [boolean]$allowPostpone;
+    [string[]]$ProcessName;
+    
+}
+
 #region Functions
 ########################################################
 
@@ -1596,6 +1612,285 @@ Function Add-ActiveUserSetup {
         Write-Log "Regsitry Keys for Active User Setup not set." -Type Error
         throw "Regsitry Keys for Active User Setup not set."
     } 
+}
+
+function Invoke-GenericUserMessage
+{
+    <#
+    .DESCRIPTION
+    For this function to work the UserCommunication-Modul from Syntaro has to be insalled. This Function can be used to create a pop-up messages to the user.
+
+    .PARAMETER guid
+    Specifies the guid, to witch the notification corresponds
+
+    .PARAMETER notificationType
+    Type of Notification ("Reboot","Notification","ProcessKill",PostPone")
+    
+    .PARAMETER title
+    Title for notification
+
+    .PARAMETER message
+    Messagee for notification
+
+    .PARAMETER processName
+    Name of Process to close. Only use with notification type killProcess
+
+    .PARAMETER timeForRebootSeconds
+    Defines how long to wait before automatically reboot computer
+
+    .PARAMETER waitOnClose
+    Set this switch if you you want to wait for te user to respond
+
+    .PARAMETER allowPostpone
+    Allows user to postpone notification
+
+    .PARAMETER autoKillApplication
+    Killst defined process automatically
+
+    .EXAMPLE
+    Invoke-GenericUserMessage -title "Intalling Application" -message "We are currently installing your application please stand by"
+    #>
+    param(
+        [Parameter()]
+        [GUID]
+        $guid = [GUID]::NewGuid(),
+        [Parameter()]
+        [ValidateSet("Reboot","Notification","ProcessKill","Postpone")]
+        [string]
+        $notificationType = "Notification",
+        [Parameter(Mandatory=$true)]
+        [String]
+        $title,
+        [Parameter(Mandatory=$true)]
+        [String]
+        $message,
+        [Parameter()]
+        [string[]]
+        $processName,
+        [Parameter()]
+        [int]
+        $timeForRebootSeconds,
+        [switch]$waitOnClose,
+        [switch]$allowPostpone,
+        [switch]$autoKillApplication
+    )
+    $myJobject = New-Object SyntaroNotification
+
+    $myJobject.id = $guid;
+    $myJobject.title = $title;
+    $myJobject.message = $message;
+    $myJobject.waitOnClose = $waitOnClose;
+    $myJObject.notificationType = $notificationType;
+    $myJobject.TimeForRebootSeconds = $TimeForRebootSeconds;
+    $myJobject.allowPostpone = $allowPostpone;
+    $myJobject.ProcessName = $ProcessName;
+    $myJobject.AutoKillApplication = $AutoKillApplication;
+
+    $FinalMessage = $myJobject | ConvertTo-Json
+
+    try 
+    {
+       Write-EventLog -LogName "Syntaro" -Source "UserInteraction" -EntryType Information -Message $FinalMessage -EventId 1
+        ##wait on message return
+       return $myJobject.id;
+    }
+    catch
+    {
+        Write-Output "Could not write into Eventlog" $_.Exception
+    }
+}
+
+function Invoke-ProcessMessage
+{
+    <#
+    .DESCRIPTION
+    For this function to work the UserCommunication-Modul from Syntaro has to be insalled. This function can be used to prompt the user to close an application
+
+    .PARAMETER ProcessName
+    Tells wich process has to be closed
+
+    .PARAMETER UserMessage
+    Messagee for notification
+
+    .PARAMETER UserMessageTitle
+    Title for notification
+
+    .PARAMETER timeToWait
+    Sets the time, the script will wait for a user input before returning false, in seconds. Default value is 120 seconds.
+
+    .PARAMETER autoKillApplication
+    Set this switch if you want to kill the application automatically after the timeToWait expires. The user will still get the notification.
+
+    .EXAMPLE
+    Invoke-ProcessMessage -ProcessName "Outlook"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]
+        $processName,
+        [Parameter()]
+        [String]
+        $UserMessage = "Please close $processName",
+        [Parameter()]
+        [String]
+        $userMessageTitle = "Waiting for $processName to close",
+        [Parameter()]
+        [int]
+        $timeToWait = 120,
+        [Switch]$autoKillApplication
+    )
+
+    $waitedTime = 0
+    $loopBreaker = $false
+    
+    if($AutoKillApplication)
+    {
+        $guid = Invoke-GenericUserMessage -title $userMessageTitle -message $UserMessage -ProcessName $ProcessName -notificationType ProcessKill -AutoKillApplication -TimeForRebootSeconds $timeToWait
+    }else
+    {
+        $guid = Invoke-GenericUserMessage -title $userMessageTitle -message $UserMessage -ProcessName $ProcessName -notificationType ProcessKill
+    }
+
+
+    do
+    {
+        $applicationWritten = Get-EventLog -Source "UserInteractionEngine" -LogName "Syntaro" -Message "*$guid*"
+        if($applicationWritten.Count -gt 0)
+        {
+            if($AutoKillApplication)
+            {
+                $guid = Invoke-GenericUserMessage -title $userMessageTitle -message $UserMessage -ProcessName $ProcessName -notificationType ProcessKill -AutoKillApplication -TimeForRebootSeconds $timeToWait
+            }else
+            {
+                $guid = Invoke-GenericUserMessage -title $userMessageTitle -message $UserMessage -ProcessName $ProcessName -notificationType ProcessKill
+            }
+        }
+        Start-Sleep -Seconds 10
+        $waitedTime += 10
+        $applicationWritten = Get-EventLog -LogName "Syntaro" -Source "UserInteractionEngine" -Message "*$guid*"
+        if($applicationWritten.Count -gt 0)
+        {
+            foreach($entry in $applicationWritten)
+            {
+                $entryInJson = $entry.Message | ConvertFrom-Json
+                if($entryInJson.Action -eq "Continue")
+                {
+                    $runningProcess = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue
+                }elseif($entryInJson.Action -eq "KillNow")
+                {
+                    Kill-Process -Name $ProcessName
+                    $loopBreaker = $TRUE
+                }
+            }
+            if($runningProcess.Count -eq 0)
+            {
+                $loopBreaker = $true
+            }
+        }
+    }until($loopBreaker -or $waitedTime -ge $timeToWait)
+
+    if(($AutoKillApplication) -AND (-not($loopBreaker)))
+    {
+        Kill-Process -Name $ProcessName
+        return $true
+    }
+    else
+    {
+        $runningProcess = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue
+        if($runningProcess.Count -gt 0)
+        {
+            return $false
+        }else
+        {
+            return $true
+        }
+    }
+}
+
+function Invoke-PostPoneMessage
+{
+    <#
+    .DESCRIPTION
+    For this function to work the UserCommunication-Modul from Syntaro has to be insalled. This function can be used to ask the user, if the application install should be postponed.
+
+    .PARAMETER UserMessage
+    Messagee for notification
+
+    .PARAMETER UserMessageTitle
+    Title for notification
+
+    .PARAMETER timeToWait
+    Sets the time, the script will wait for a user input before returning true, in seconds. Default value is 120 seconds.
+
+    .EXAMPLE
+    Invoke-PostPoneMessage
+    #>
+
+    param(
+        [Parameter()]
+        [String]
+        $userMessage = "An application is about to be installed. Ready? Intall now. Not ready? Pick a time that works for you.",
+        [Parameter()]
+        [String]
+        $userMessageTitle = "We have an applicatoin which is about to be installed.",
+        [Parameter()]
+        [int]
+        $timeToWait = 120
+    )
+
+    $waitedTime = 0
+    $loopBreaker = $FALSE
+
+    $guid = Invoke-GenericUserMessage -title $userMessageTitle -message $UserMessage -notificationType Postpone
+    while(-not($loopBreaker))
+    {
+        Start-Sleep -Seconds 10
+        $waitedTime += 10
+        $applicationWritten = Get-EventLog -Source "UserInteractionEngine" -LogName "Syntaro" -Message "*$guid*"
+        if($applicationWritten.Count -gt 0)
+        {
+            $loopBreaker = $TRUE
+            
+        }elseif($waitedTime -ge $timeToWait)
+        {
+            $loopBreaker = $TRUE
+        }        
+    }
+    if(($waitedTime -ge $timeToWait))
+    {
+        return $TRUE
+    }elseif($applicationWritten.Count -gt 0)
+    {
+        foreach($entry in $applicationWritten)
+        {
+            if($entry.Source -eq "UserInteractionEngine")
+            {
+                $entryInJson = $entry.Message | ConvertFrom-Json
+                if($entryInJson.Action -eq "Postpone")
+                {
+                    $TimeString = $entryInJson.Delay
+                    $TimeSpan = [System.TimeSpan]::Parse($TimeString)
+                    $Minutes = [System.Math]::Round($TimeSpan.TotalMinutes,0)
+                    $delayInMinutes = $Minutes.ToString()
+                    $syntaroInstallerTask = Get-ScheduledTask -TaskName "Syntaro Full Installer"
+                    $newTriggers = @($(New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes($delayInMinutes)),$($syntaroInstallerTask.Triggers))
+                    Try{
+                        #setting defined triggers for scheduled task
+                        Set-ScheduledTask -TaskName "Syntaro Full Installer" -Trigger $newTriggers -ErrorAction Stop | Out-Null
+                        Write-Log "Trigger was set to run in $delayInMinutes minutes" -Type Info
+                        return $FALSE
+                    }catch{
+                        Write-Log "Could not add a new trigger for scheduled task" -Type Error -Exception $_.Exception
+                        Throw $_.Exception
+                    }
+                    return $FALSE                    
+                }elseif($entryInJson.Action -eq "Continue")
+                {
+                    return $TRUE
+                }
+            }
+        }
+    }
 }
 #endregion
 
