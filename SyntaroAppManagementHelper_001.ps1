@@ -1829,7 +1829,7 @@ function Invoke-PostPoneMessage
     param(
         [Parameter()]
         [String]
-        $userMessage = "An application is about to be installed. Ready? Intall now. Not ready? Pick a time that works for you.",
+        $userMessage = "An application is about to be installed. Ready? Install now. Not ready? Pick a time that works for you.",
         [Parameter()]
         [String]
         $userMessageTitle = "We have an applicatoin which is about to be installed.",
