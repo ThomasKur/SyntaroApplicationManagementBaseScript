@@ -31,7 +31,7 @@ History
     009/2018-04-01/KUR: New Functionality to check for Version in Get-InstalledApplication
     010/2018-04-23/KUR: Added new function Add-ActiveUserSetup which can be used in combination with ActiveUserSetup solution of baseVISION.
     011/2018-08-14/KUR: Execute-EXE can now be executed without arguments.
-    012/2019-01-29/ATHI: Added new functions: Invoke-GenericUserMessage, Invoke-ProcessMessage and Invokr-PosPoneMessage which can be used with the UserNotification plugin
+    012/2019-01-29/ATHI: Added new functions: Invoke-GenericUserMessage, Invoke-ProcessMessage and Invoke-PostPoneMessage which can be used with the UserNotification plugin
 #>
 ## Manual Variable Definition
 ########################################################
